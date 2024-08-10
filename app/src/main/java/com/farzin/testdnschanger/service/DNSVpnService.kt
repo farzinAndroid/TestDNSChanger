@@ -19,13 +19,20 @@ import com.farzin.testdnschanger.API.API.randomLocalIPv6Address
 import com.farzin.testdnschanger.API.API.randomString
 import com.farzin.testdnschanger.MainActivity
 import com.farzin.testdnschanger.R
-import java.io.IOException
-import java.net.DatagramSocket
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.nio.channels.DatagramChannel
 import java.util.Random
 
 class DNSVpnService : VpnService() {
+
+    private val scope = CoroutineScope(SupervisorJob())
+
     private var run = true
     private var isRunning = false
     private var stopped = false
@@ -154,95 +161,89 @@ class DNSVpnService : VpnService() {
         super.onDestroy()
     }
 
-    @SuppressLint("ForegroundServiceType")
+    @Override
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+        val scope = CoroutineScope(SupervisorJob())
         Log.d("TAG", "service onStart Command")
         if (intent != null) {
-            if (intent.getBooleanExtra("stop_vpn", false)) {
-                if (thread != null) {
-                    run = false
-                    thread!!.interrupt()
-                    thread = null
-                }
-            } else if (intent.getBooleanExtra("start_vpn", false)) {
-                if (thread != null) {
-                    run = false
-                    thread!!.interrupt()
-                }
-                thread = Thread {
-                    var tunnel: DatagramChannel? = null
-                    var tunnelSocket: DatagramSocket? = null
-                    try {
-                        Thread.setDefaultUncaughtExceptionHandler { t, e ->
-                            println(e)
-                            stopSelf()
-                        }
-                        initNotification()
-                        startForeground(NOTIFICATION_ID, notificationBuilder!!.build())
-                        if (notificationBuilder != null) notificationBuilder!!.setWhen(System.currentTimeMillis())
-                        tunnelInterface =
-                            builder.setSession("DnsChanger").addAddress("172.31.255.250", 30)
-                                .addAddress(randomLocalIPv6Address(), 48).addDnsServer(dns1)
-                                .addDnsServer(dns2)
-                                .addDnsServer(dns1_v6).addDnsServer(dns2_v6).establish()
-                        tunnel = DatagramChannel.open()
-                        tunnel.connect(InetSocketAddress("127.0.0.1", 8087))
-                        protect(tunnel.socket().also { tunnelSocket = it })
-                        isRunning = true
-                        sendBroadcast(
-                            Intent(API.BROADCAST_SERVICE_STATUS_CHANGE).putExtra(
-                                "vpn_running",
-                                true
-                            )
-                        )
-                        updateNotification()
-                        try {
-                            while (run) {
-                                Thread.sleep(250)
-                            }
-                        } catch (e2: InterruptedException) {
-                            e2.printStackTrace()
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    } finally {
-                        isRunning = false
-                        sendBroadcast(
-                            Intent(API.BROADCAST_SERVICE_STATUS_CHANGE).putExtra(
-                                "vpn_running",
-                                false
-                            )
-                        )
-                        updateNotification()
-                        if (tunnelInterface != null) try {
-                            tunnelInterface!!.close()
-                        } catch (e: IOException) {
-                            e.printStackTrace()
-                        }
-                        if (tunnel != null) try {
-                            tunnel.close()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                        if (tunnelSocket != null) try {
-                            tunnelSocket!!.close()
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
+            when {
+                intent.getBooleanExtra("stop_vpn", false) -> {
+                    scope.launch {
+                        stopVpn()
                     }
                 }
-                run = true
-                thread!!.start()
-            } else if (intent.getBooleanExtra("destroy", false)) {
-                stopped = true
-                if (thread != null) {
-                    run = false
-                    thread!!.interrupt()
+                intent.getBooleanExtra("start_vpn", false) -> {
+                    scope.launch {
+                        startVpn()
+                    }
                 }
-                stopSelf()
+                intent.getBooleanExtra("destroy", false) -> {
+                    stopped = true
+                    stopVpn()
+                    stopSelf()
+                }
             }
         }
         updateNotification()
         return START_STICKY
+    }
+
+    @SuppressLint("ForegroundServiceType")
+    private suspend fun startVpn() {
+        val tunnel = withContext(Dispatchers.IO) {
+            DatagramChannel.open()
+        }
+        initNotification()
+        startForeground(NOTIFICATION_ID, notificationBuilder!!.build())
+        if (notificationBuilder != null) notificationBuilder!!.setWhen(System.currentTimeMillis())
+
+        try {
+            tunnelInterface = builder.setSession("DnsChanger")
+                .addAddress("172.31.255.250", 30)
+                .addAddress(randomLocalIPv6Address(), 48)
+                .addDnsServer(dns1)
+                .addDnsServer(dns2)
+                .addDnsServer(dns1_v6)
+                .addDnsServer(dns2_v6)
+                .establish()
+
+
+            withContext(Dispatchers.IO) {
+                tunnel.connect(InetSocketAddress("127.0.0.1", 8087))
+            }
+            protect(tunnel.socket())
+
+            isRunning = true
+            sendBroadcast(
+                Intent(API.BROADCAST_SERVICE_STATUS_CHANGE).putExtra(
+                    "vpn_running",
+                    true
+                )
+            )
+            updateNotification()
+
+            while (run) {
+                delay(250) // Suspend for 250 milliseconds
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            isRunning = false
+            sendBroadcast(
+                Intent(API.BROADCAST_SERVICE_STATUS_CHANGE).putExtra(
+                    "vpn_running",
+                    false
+                )
+            )
+            updateNotification()
+            tunnelInterface?.close()
+            withContext(Dispatchers.IO) {
+                tunnel?.close()
+            }
+        }
+    }
+
+    private fun stopVpn() {
+        run = false
     }
 }
