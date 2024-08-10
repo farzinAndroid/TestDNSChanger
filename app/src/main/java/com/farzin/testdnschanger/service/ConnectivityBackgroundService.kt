@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -40,18 +42,21 @@ class ConnectivityBackgroundService : Service() {
         }
     }
 
-
     override fun onCreate() {
         super.onCreate()
         registerReceiver(connectivityChange, IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-        val cm = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        val activeNetwork = cm.activeNetworkInfo ?: return
-        if (activeNetwork.type == ConnectivityManager.TYPE_WIFI) {
-            startService()
-        } else if (activeNetwork.type == ConnectivityManager.TYPE_MOBILE) {
-            startService()
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // Handle network availability
+                if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
+                    startService()
+                } else if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true) {
+                    startService()
+                }
+            }
         }
+        cm.registerDefaultNetworkCallback(networkCallback)
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
