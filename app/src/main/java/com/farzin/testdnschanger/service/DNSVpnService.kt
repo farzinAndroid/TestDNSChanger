@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.farzin.testdnschanger.API.API
 import com.farzin.testdnschanger.API.API.randomLocalIPv6Address
 import kotlinx.coroutines.CoroutineScope
@@ -54,7 +55,12 @@ class DNSVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         myNotificationManager.initNotification()
-        registerReceiver(stateRequestReceiver, IntentFilter(API.BROADCAST_SERVICE_STATE_REQUEST))
+        ContextCompat.registerReceiver(
+            this,
+            stateRequestReceiver,
+            IntentFilter(API.BROADCAST_SERVICE_STATE_REQUEST),
+            ContextCompat.RECEIVER_EXPORTED
+        )
         Log.d("TAG", "service created")
     }
 

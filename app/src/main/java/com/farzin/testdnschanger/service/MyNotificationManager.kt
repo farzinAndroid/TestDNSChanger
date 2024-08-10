@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.farzin.testdnschanger.API.API.randomString
@@ -122,10 +123,12 @@ class MyNotificationManager(private val context: Context) {
                 val channel = NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
                     NOTIFICATION_CHANNEL_NAME,
-                    NotificationManager.IMPORTANCE_HIGH
+                    NotificationManager.IMPORTANCE_NONE
                 )
-                channel.description = "Notification channel for VPN service"
+                channel.description = "Notification channel for DNS service"
                 notificationManager?.createNotificationChannel(channel)
+
+
             }
         }
     }
@@ -137,7 +140,22 @@ class MyNotificationManager(private val context: Context) {
 
 
     fun startNotificationForeground(context: Service) {
-        context.startForeground(NOTIFICATION_ID, notificationBuilder!!.build())
-        if (notificationBuilder != null) notificationBuilder!!.setWhen(System.currentTimeMillis())
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            notificationBuilder?.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+        } else {
+            notificationBuilder?.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFAULT)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.startForeground(
+                NOTIFICATION_ID,
+                notificationBuilder!!.build(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            context.startForeground(NOTIFICATION_ID, notificationBuilder!!.build())
+        }
+        if (notificationBuilder != null) notificationBuilder?.setWhen(System.currentTimeMillis())
     }
 }
