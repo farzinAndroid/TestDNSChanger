@@ -41,6 +41,7 @@ class DNSVpnService : VpnService() {
     }
 
     private fun broadcastServiceState(vpnRunning: Boolean) {
+        Log.d("TAG", "Sending broadcast: $vpnRunning")
         sendBroadcast(
             Intent(API.BROADCAST_SERVICE_STATUS_CHANGE).putExtra(
                 "vpn_running",
