@@ -41,7 +41,6 @@ class DNSVpnService : VpnService() {
     private var notificationBuilder: NotificationCompat.Builder? = null
     private var notificationManager: NotificationManager? = null
     private val NOTIFICATION_ID = 112
-    private val handler = Handler()
     private val dns1 = "10.202.10.202"
     private val dns2 = "10.202.10.102"
     private val dns1_v6 = "2001:4860:4860::8888"
@@ -62,7 +61,7 @@ class DNSVpnService : VpnService() {
     }
 
     @SuppressLint("RestrictedApi")
-    private fun updateNotification() {
+    private suspend fun updateNotification() {
         initNotification()
         if (stopped || notificationBuilder == null || notificationManager == null) {
             if (notificationManager != null) notificationManager!!.cancel(NOTIFICATION_ID)
@@ -88,12 +87,14 @@ class DNSVpnService : VpnService() {
             NotificationCompat.BigTextStyle().bigText
                 ("DNS 1: $dns1\nDNS 2: $dns2\nDNSV6 1: $dns1_v6\nDNSV6 2: $dns2_v6")
         )
-        handler.postDelayed({
+
+        withContext(Dispatchers.Main){
             if (notificationManager != null && notificationBuilder != null && !stopped) notificationManager!!.notify(
                 NOTIFICATION_ID,
                 notificationBuilder!!.build()
             )
-        }, 10)
+        }
+
     }
 
     private fun initNotification() {
@@ -182,7 +183,9 @@ class DNSVpnService : VpnService() {
                 }
             }
         }
-        updateNotification()
+        scope.launch {
+            updateNotification()
+        }
         return START_STICKY
     }
 
