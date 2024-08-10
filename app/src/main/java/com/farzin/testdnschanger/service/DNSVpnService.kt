@@ -60,42 +60,57 @@ class DNSVpnService : VpnService() {
         )
     }
 
-    @SuppressLint("RestrictedApi")
+
     private suspend fun updateNotification() {
         initNotification()
         if (stopped || notificationBuilder == null || notificationManager == null) {
             if (notificationManager != null) notificationManager!!.cancel(NOTIFICATION_ID)
             return
         }
-        val a1 = notificationBuilder!!.mActions[0]
-        a1.actionIntent = PendingIntent.getService(
-            this,
-            0,
-            Intent(this, DNSVpnService::class.java).setAction(
-                Random().nextInt(50).toString() + "_action"
-            ).putExtra(if (isRunning) "stop_vpn" else "start_vpn", true),
-            PendingIntent.FLAG_IMMUTABLE
-        )
-        notificationBuilder!!.mActions[1].actionIntent = PendingIntent.getService(
-            this,
-            1,
-            Intent(this, DNSVpnService::class.java)
-                .setAction(randomString(80) + "_action").putExtra("destroy", true),
-            PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        notificationBuilder!!.setStyle(
-            NotificationCompat.BigTextStyle().bigText
-                ("DNS 1: $dns1\nDNS 2: $dns2\nDNSV6 1: $dns1_v6\nDNSV6 2: $dns2_v6")
-        )
 
-        withContext(Dispatchers.Main){
-            if (notificationManager != null && notificationBuilder != null && !stopped) notificationManager!!.notify(
-                NOTIFICATION_ID,
-                notificationBuilder!!.build()
+        val actionBuilder = NotificationCompat.Action.Builder(
+            R.drawable.ic_launcher_background,
+            "getString(R.string.action_pause)",
+            PendingIntent.getService(
+                this,
+                0,
+                Intent(this, DNSVpnService::class.java).setAction(
+                    Random().nextInt(50).toString() + "_action"
+                ).putExtra(if (isRunning) "stop_vpn" else "start_vpn", true),
+                PendingIntent.FLAG_IMMUTABLE
             )
-        }
+        )
+        val action1 = actionBuilder.build()
 
+        val actionBuilder2 = NotificationCompat.Action.Builder(
+            R.drawable.ic_launcher_background,
+            "getString(R.string.action_stop)",
+            PendingIntent.getService(
+                this,
+                1,
+                Intent(this, DNSVpnService::class.java)
+                    .setAction(randomString(80) + "_action").putExtra("destroy", true),
+                PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        )
+        val action2 = actionBuilder2.build()
+
+        notificationBuilder!!.addAction(action1)
+        notificationBuilder!!.addAction(action2)
+
+        notificationBuilder!!.setStyle(
+            NotificationCompat.BigTextStyle().bigText(
+                "DNS 1: $dns1\nDNS 2: $dns2\nDNSV6 1: $dns1_v6\nDNSV6 2: $dns2_v6"
+            )
+        )
+
+        withContext(Dispatchers.Main) {
+            if (notificationManager != null && notificationBuilder != null && !stopped) {
+                notificationManager!!.notify(NOTIFICATION_ID, notificationBuilder!!.build())
+            }
+        }
     }
+
 
     private fun initNotification() {
         if (notificationBuilder == null) {
