@@ -1,8 +1,10 @@
 package com.farzin.testdnschanger
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -10,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,10 +29,16 @@ import androidx.compose.ui.Modifier
 import com.farzin.testdnschanger.API.API
 import com.farzin.testdnschanger.service.DNSVpnService
 import com.farzin.testdnschanger.ui.theme.TestDNSChangerTheme
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionState
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
+@OptIn(ExperimentalPermissionsApi::class)
 class MainActivity : ComponentActivity() {
     private lateinit var vpnPermissionLauncher: ActivityResultLauncher<Intent>
+    private lateinit var notificationPermission:PermissionState
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,13 +54,27 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+
         setContent {
+
+            var notificationPermissionGranted by remember {
+                mutableStateOf(false)
+            }
+
+            if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU){
+                notificationPermission =
+                    rememberPermissionState(permission = Manifest.permission.POST_NOTIFICATIONS){
+                        if (it) {
+                            notificationPermissionGranted = true
+                        }
+                    }
+            }
             TestDNSChangerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     var running by remember {
                         mutableStateOf(API.checkVPNServiceRunning(this@MainActivity))
                     }
-                    Log.e("TAG",running.toString())
+                    Log.e("TAG", running.toString())
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -61,11 +84,16 @@ class MainActivity : ComponentActivity() {
                         ) {
                         Button(
                             onClick = {
-                                if (API.checkVPNServiceRunning(this@MainActivity)) {
-                                    stopDNSService()
+                                if (notificationPermission.status.isGranted) {
+                                    if (API.checkVPNServiceRunning(this@MainActivity)) {
+                                        stopDNSService()
+                                    } else {
+                                        startDnsService()
+                                    }
                                 } else {
-                                    startDnsService()
+                                    notificationPermission.launchPermissionRequest()
                                 }
+
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
