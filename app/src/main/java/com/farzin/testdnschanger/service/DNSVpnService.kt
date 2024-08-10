@@ -163,7 +163,6 @@ class DNSVpnService : VpnService() {
 
     @Override
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        val scope = CoroutineScope(SupervisorJob())
         Log.d("TAG", "service onStart Command")
         if (intent != null) {
             when {
@@ -203,8 +202,8 @@ class DNSVpnService : VpnService() {
                 .addAddress(randomLocalIPv6Address(), 48)
                 .addDnsServer(dns1)
                 .addDnsServer(dns2)
-                .addDnsServer(dns1_v6)
-                .addDnsServer(dns2_v6)
+//                .addDnsServer(dns1_v6)
+//                .addDnsServer(dns2_v6)
                 .establish()
 
 
