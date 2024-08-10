@@ -1,24 +1,15 @@
 package com.farzin.testdnschanger.service
 
 import android.annotation.SuppressLint
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.VpnService
-import android.os.Build
-import android.os.Handler
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import com.farzin.testdnschanger.API.API
 import com.farzin.testdnschanger.API.API.randomLocalIPv6Address
-import com.farzin.testdnschanger.API.API.randomString
-import com.farzin.testdnschanger.MainActivity
-import com.farzin.testdnschanger.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,7 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.nio.channels.DatagramChannel
-import java.util.Random
 
 class DNSVpnService : VpnService() {
 
@@ -38,9 +28,7 @@ class DNSVpnService : VpnService() {
     private var stopped = false
     private var tunnelInterface: ParcelFileDescriptor? = null
     private val builder: Builder = Builder()
-    private var notificationBuilder: NotificationCompat.Builder? = null
-    private var notificationManager: NotificationManager? = null
-    private val NOTIFICATION_ID = 112
+    private val myNotificationManager = MyNotificationManager(this)
     private val dns1 = "10.202.10.202"
     private val dns2 = "10.202.10.102"
     private val dns1_v6 = "2001:4860:4860::8888"
@@ -61,105 +49,11 @@ class DNSVpnService : VpnService() {
     }
 
 
-    private suspend fun updateNotification() {
-        initNotification()
-        if (stopped || notificationBuilder == null || notificationManager == null) {
-            if (notificationManager != null) notificationManager!!.cancel(NOTIFICATION_ID)
-            return
-        }
 
-        val actionBuilder = NotificationCompat.Action.Builder(
-            R.drawable.ic_launcher_background,
-            "getString(R.string.action_pause)",
-            PendingIntent.getService(
-                this,
-                0,
-                Intent(this, DNSVpnService::class.java).setAction(
-                    Random().nextInt(50).toString() + "_action"
-                ).putExtra(if (isRunning) "stop_vpn" else "start_vpn", true),
-                PendingIntent.FLAG_IMMUTABLE
-            )
-        )
-        val action1 = actionBuilder.build()
-
-        val actionBuilder2 = NotificationCompat.Action.Builder(
-            R.drawable.ic_launcher_background,
-            "getString(R.string.action_stop)",
-            PendingIntent.getService(
-                this,
-                1,
-                Intent(this, DNSVpnService::class.java)
-                    .setAction(randomString(80) + "_action").putExtra("destroy", true),
-                PendingIntent.FLAG_CANCEL_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        )
-        val action2 = actionBuilder2.build()
-
-        notificationBuilder!!.addAction(action1)
-        notificationBuilder!!.addAction(action2)
-
-        notificationBuilder!!.setStyle(
-            NotificationCompat.BigTextStyle().bigText(
-                "DNS 1: $dns1\nDNS 2: $dns2\nDNSV6 1: $dns1_v6\nDNSV6 2: $dns2_v6"
-            )
-        )
-
-        withContext(Dispatchers.Main) {
-            if (notificationManager != null && notificationBuilder != null && !stopped) {
-                notificationManager!!.notify(NOTIFICATION_ID, notificationBuilder!!.build())
-            }
-        }
-    }
-
-
-    private fun initNotification() {
-        if (notificationBuilder == null) {
-            notificationBuilder = NotificationCompat.Builder(this, "vpn_service_channel")
-                .setSmallIcon(R.drawable.ic_launcher_background)
-                .setContentTitle(getString(R.string.app_name))
-                .setContentIntent(
-                    PendingIntent.getActivity(
-                        this,
-                        0,
-                        Intent(this, MainActivity::class.java),
-                        PendingIntent.FLAG_IMMUTABLE
-                    )
-                )
-                .setAutoCancel(false)
-                .setOngoing(true)
-                .addAction(
-                    NotificationCompat.Action(
-                        R.drawable.ic_launcher_background,
-                        "getString(R.string.action_pause)",
-                        null
-                    )
-                )
-                .addAction(
-                    NotificationCompat.Action(
-                        R.drawable.ic_launcher_background,
-                        "getString(R.string.action_stop)",
-                        null
-                    )
-                )
-                .setUsesChronometer(true)
-            notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-            var channel: NotificationChannel? = null
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                channel = NotificationChannel(
-                    "vpn_service_channel",
-                    "VPN Service",
-                    NotificationManager.IMPORTANCE_LOW
-                )
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                notificationManager!!.createNotificationChannel(channel!!)
-            }
-        }
-    }
 
     override fun onCreate() {
         super.onCreate()
-        initNotification()
+        myNotificationManager.initNotification()
         registerReceiver(stateRequestReceiver, IntentFilter(API.BROADCAST_SERVICE_STATE_REQUEST))
         Log.d("TAG", "service created")
     }
@@ -169,9 +63,7 @@ class DNSVpnService : VpnService() {
             stopped = true
             run = false
         }
-        notificationManager?.cancel(NOTIFICATION_ID)
-        notificationManager = null
-        notificationBuilder = null
+        myNotificationManager.cancelNotification()
         unregisterReceiver(stateRequestReceiver)
         super.onDestroy()
     }
@@ -199,7 +91,7 @@ class DNSVpnService : VpnService() {
             }
         }
         scope.launch {
-            updateNotification()
+            myNotificationManager.updateNotification(stopped)
         }
         return START_STICKY
     }
@@ -209,9 +101,8 @@ class DNSVpnService : VpnService() {
         val tunnel = withContext(Dispatchers.IO) {
             DatagramChannel.open()
         }
-        initNotification()
-        startForeground(NOTIFICATION_ID, notificationBuilder!!.build())
-        if (notificationBuilder != null) notificationBuilder!!.setWhen(System.currentTimeMillis())
+        myNotificationManager.initNotification()
+        myNotificationManager.startNotificationForeground(this)
 
         try {
             tunnelInterface = builder.setSession("DnsChanger")
@@ -236,7 +127,7 @@ class DNSVpnService : VpnService() {
                     true
                 )
             )
-            updateNotification()
+            myNotificationManager.updateNotification(stopped)
 
             while (run) {
                 delay(250) // Suspend for 250 milliseconds
@@ -251,7 +142,7 @@ class DNSVpnService : VpnService() {
                     false
                 )
             )
-            updateNotification()
+            myNotificationManager.updateNotification(stopped)
             tunnelInterface?.close()
             withContext(Dispatchers.IO) {
                 tunnel?.close()
