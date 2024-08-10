@@ -36,7 +36,6 @@ class DNSVpnService : VpnService() {
     private var run = true
     private var isRunning = false
     private var stopped = false
-    private var thread: Thread? = null
     private var tunnelInterface: ParcelFileDescriptor? = null
     private val builder: Builder = Builder()
     private var notificationBuilder: NotificationCompat.Builder? = null
@@ -150,11 +149,11 @@ class DNSVpnService : VpnService() {
     }
 
     override fun onDestroy() {
-        stopped = true
-        run = false
-        if (thread != null) thread!!.interrupt()
-        thread = null
-        notificationManager!!.cancel(NOTIFICATION_ID)
+        scope.launch {
+            stopped = true
+            run = false
+        }
+        notificationManager?.cancel(NOTIFICATION_ID)
         notificationManager = null
         notificationBuilder = null
         unregisterReceiver(stateRequestReceiver)

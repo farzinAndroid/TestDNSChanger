@@ -1,30 +1,45 @@
 package com.farzin.testdnschanger.service
 
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
-import com.farzin.testdnschanger.service.BackgroundVpnConfigureActivity.Companion.startBackgroundConfigure
 
 class ConnectivityBackgroundService : Service() {
-    private val connectivityChange: BroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            val connected = !intent.hasExtra("noConnectivity")
-            val type = intent.getIntExtra("networkType", -1)
-            if (!connected) return
-            if (type == ConnectivityManager.TYPE_WIFI) {
-                startService()
-            } else if (type == ConnectivityManager.TYPE_MOBILE) {
-                startService()
+    private lateinit var connectivityManager: ConnectivityManager
+    private lateinit var networkCallback: ConnectivityManager.NetworkCallback
+
+    override fun onCreate() {
+        super.onCreate()
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return
+                if (isWifiOrMobile(capabilities)) {
+                    startService()
+                }
+            }
+
+            override fun onLost(network: Network) {
+                // Handle network loss if needed
             }
         }
+        val networkRequest = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+            .build()
+        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+    }
+
+    private fun isWifiOrMobile(capabilities: NetworkCapabilities): Boolean {
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
     }
 
     private fun startService() {
@@ -38,25 +53,9 @@ class ConnectivityBackgroundService : Service() {
                 startService(serviceIntent)
             }
         } else {
-            startBackgroundConfigure(this, true)
+            // deleted class
+//            startBackgroundConfigure(this, true)
         }
-    }
-
-    override fun onCreate() {
-        super.onCreate()
-        registerReceiver(connectivityChange, IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION))
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val networkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                // Handle network availability
-                if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) {
-                    startService()
-                } else if (cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true) {
-                    startService()
-                }
-            }
-        }
-        cm.registerDefaultNetworkCallback(networkCallback)
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -66,4 +65,10 @@ class ConnectivityBackgroundService : Service() {
     override fun onBind(intent: Intent): IBinder? {
         return null
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        connectivityManager.unregisterNetworkCallback(networkCallback)
+    }
 }
+
